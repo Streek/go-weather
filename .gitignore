@@ -1,0 +1,48 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+go-weather
+wgo
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+*.coverprofile
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Cache files
+.cache/
+
+# Application specific cache
+/weather-cache/
+
+# VSCode specific files
+.vscode/
+
+# IntelliJ/Goland specific files
+.idea/
+*.iml
+
+# MacOS specific files
+.DS_Store
+
+# Local configuration
+weather_config.json
+
+# Log files
+*.log
+
+# Build output directories
+bin/
+dist/
