@@ -1,0 +1,93 @@
+name: Release and AUR Publish
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get current version
+        id: version
+        run: |
+          if [ -f VERSION ]; then
+            VERSION=$(cat VERSION)
+          else
+            VERSION="1.0.0"
+            echo "$VERSION" > VERSION
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $VERSION"
+
+      - name: Check if tag exists
+        id: tag-check
+        run: |
+          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Tag v${{ steps.version.outputs.version }} already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Tag v${{ steps.version.outputs.version }} does not exist"
+          fi
+
+      - name: Create tag if not exists
+        if: steps.tag-check.outputs.exists == 'false'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git tag -a "v${{ steps.version.outputs.version }}" -m "Release version ${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Build application
+        run: |
+          make build
+          ls -la bin/
+
+      - name: Create GitHub Release
+        if: steps.tag-check.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Release v${{ steps.version.outputs.version }}
+          files: bin/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update AUR package
+        if: steps.tag-check.outputs.exists == 'false'
+        run: |
+          # Clone AUR repository
+          git clone ssh://aur@aur.archlinux.org/go-weather.git aur-repo
+          cd aur-repo
+          
+          # Update PKGBUILD with new version
+          sed -i "s/pkgver=.*/pkgver=${{ steps.version.outputs.version }}/" PKGBUILD
+          
+          # Generate new checksums
+          updpkgsums
+          
+          # Update .SRCINFO
+          makepkg --printsrcinfo > .SRCINFO
+          
+          # Commit and push to AUR
+          git config user.name "streek"
+          git config user.email "streek@mesaro.com"
+          git add PKGBUILD .SRCINFO
+          git commit -m "Update to version ${{ steps.version.outputs.version }}"
+          git push
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_KEY }}
