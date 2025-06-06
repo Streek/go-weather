@@ -119,16 +119,11 @@ jobs:
           
           # Update PKGBUILD with new version
           sed -i "s/pkgver=.*/pkgver=${{ steps.version.outputs.version }}/" PKGBUILD
-          
-          # Generate new checksums
-          updpkgsums
-          
-          # Update .SRCINFO
-          makepkg --printsrcinfo > .SRCINFO
-          
+
           # Commit and push to AUR
           git config user.name "Keith Connolly"
           git config user.email "streek@mesaro.com"
+          git config --global init.defaultBranch master
           git add PKGBUILD .SRCINFO
           git commit -m "Update to version ${{ steps.version.outputs.version }}" || echo "No changes to commit"
           git push
