@@ -1,7 +1,7 @@
 # Maintainer: Keith Connolly <streek@mesaro.com>
 pkgname=wgo
-pkgver=0.1.0
-pkgrel=1
+pkgver=1.0.1
+pkgrel=2
 pkgdesc="Console-based weather application"
 arch=('x86_64' 'aarch64')
 url="https://github.com/streek/go-weather"
