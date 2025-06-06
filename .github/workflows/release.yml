@@ -120,9 +120,6 @@ jobs:
           # Update PKGBUILD with new version
           sed -i "s/pkgver=.*/pkgver=${{ steps.version.outputs.version }}/" PKGBUILD
           
-          # Install makepkg dependencies
-          sudo pacman -Sy --noconfirm base-devel
-          
           # Generate new checksums
           updpkgsums
           
