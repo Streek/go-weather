@@ -1,10 +1,10 @@
-# Maintainer: Your Name <your.email@example.com>
+# Maintainer: Keith Connolly <streek@mesaro.com>
 pkgname=wgo
 pkgver=0.1.0
 pkgrel=1
 pkgdesc="Console-based weather application"
 arch=('x86_64' 'aarch64')
-url="https://github.com/streek/go-weather"
+url="https://github.com/streek/console-go-weather"
 license=('GPL3')
 depends=()
 makedepends=('go')
@@ -12,7 +12,7 @@ source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
 sha256sums=('SKIP')
 
 build() {
-  cd "$srcdir/go-weather-$pkgver"
+  cd "$srcdir/console-go-weather-$pkgver"
   export CGO_CPPFLAGS="${CPPFLAGS}"
   export CGO_CFLAGS="${CFLAGS}"
   export CGO_CXXFLAGS="${CXXFLAGS}"
@@ -22,7 +22,7 @@ build() {
 }
 
 package() {
-  cd "$srcdir/go-weather-$pkgver"
+  cd "$srcdir/console-go-weather-$pkgver"
   install -Dm755 wgo "$pkgdir/usr/bin/wgo"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   # Add documentation if you have any
