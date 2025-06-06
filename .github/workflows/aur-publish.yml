@@ -2,7 +2,7 @@ name: Publish to AUR
 
 on:
   release:
-    types: [created]
+    types: [created, published]
 
 jobs:
   publish-aur:

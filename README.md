@@ -1,3 +1,6 @@
+[![Go](https://github.com/Streek/go-weather/actions/workflows/go.yml/badge.svg)](https://github.com/Streek/go-weather/actions/workflows/go.yml)
+[![Publish to AUR](https://github.com/Streek/go-weather/actions/workflows/aur-publish.yml/badge.svg)](https://github.com/Streek/go-weather/actions/workflows/aur-publish.yml)
+
 # Console Go Weather
 
 A powerful command-line weather application written in Go that provides current, daily, and hourly weather forecasts.
