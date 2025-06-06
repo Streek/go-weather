@@ -89,12 +89,39 @@ jobs:
       - name: Update AUR package
         if: steps.release-check.outputs.exists == 'false'
         run: |
-          # Clone AUR repository
-          git clone ssh://aur@aur.archlinux.org/go-weather.git aur-repo
+          # Set up SSH key for AUR
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
+          
+          # Configure SSH to use the AUR key
+          cat >> ~/.ssh/config << EOF
+          Host aur.archlinux.org
+            IdentityFile ~/.ssh/aur
+            User aur
+          EOF
+          
+          # Clone AUR repository (or create if it doesn't exist)
+          if git ls-remote ssh://aur@aur.archlinux.org/go-weather.git &>/dev/null; then
+            git clone ssh://aur@aur.archlinux.org/go-weather.git aur-repo
+          else
+            mkdir aur-repo
+            cd aur-repo
+            git init
+            git remote add origin ssh://aur@aur.archlinux.org/go-weather.git
+            cd ..
+          fi
+          
+          # Copy and update PKGBUILD
+          cp PKGBUILD aur-repo/
           cd aur-repo
           
           # Update PKGBUILD with new version
           sed -i "s/pkgver=.*/pkgver=${{ steps.version.outputs.version }}/" PKGBUILD
+          
+          # Install makepkg dependencies
+          sudo pacman -Sy --noconfirm base-devel
           
           # Generate new checksums
           updpkgsums
@@ -103,10 +130,10 @@ jobs:
           makepkg --printsrcinfo > .SRCINFO
           
           # Commit and push to AUR
-          git config user.name "streek"
+          git config user.name "Keith Connolly"
           git config user.email "streek@mesaro.com"
           git add PKGBUILD .SRCINFO
-          git commit -m "Update to version ${{ steps.version.outputs.version }}"
+          git commit -m "Update to version ${{ steps.version.outputs.version }}" || echo "No changes to commit"
           git push
         env:
           SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_KEY }}
