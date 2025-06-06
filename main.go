@@ -19,7 +19,7 @@ const (
 	configFileName = "weather_config.json"
 	cacheDuration  = 1 * time.Hour
 	appName        = "Weather Console"
-	appVersion     = "1.0.0"
+	appVersion     = "1.0.1" // This will be replaced during build
 )
 
 // DisplayMode represents how weather data should be presented

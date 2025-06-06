@@ -1,7 +1,7 @@
 # Maintainer: Keith Connolly <streek@mesaro.com>
 pkgname=wgo
-pkgver=1.0.1
-pkgrel=2
+pkgver=$(cat VERSION 2>/dev/null || echo "1.0.1")
+pkgrel=1
 pkgdesc="Console-based weather application"
 arch=('x86_64' 'aarch64')
 url="https://github.com/streek/go-weather"
@@ -18,13 +18,14 @@ build() {
   export CGO_CXXFLAGS="${CXXFLAGS}"
   export CGO_LDFLAGS="${LDFLAGS}"
   export GOFLAGS="-buildmode=pie -trimpath -mod=readonly -modcacherw"
-  go build -o wgo .
+  
+  # Read version and inject it during build
+  VERSION=$(cat VERSION)
+  go build -ldflags "-X 'main.appVersion=$VERSION'" -o wgo .
 }
 
 package() {
   cd "$srcdir/go-weather-$pkgver"
   install -Dm755 wgo "$pkgdir/usr/bin/wgo"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
-  # Add documentation if you have any
-  # install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
 }
