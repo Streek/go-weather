@@ -56,7 +56,8 @@ jobs:
 
       - name: Build application
         run: |
-          make build
+          mkdir -p bin/
+          go build -ldflags "-X 'main.appVersion=${{ steps.version.outputs.version }}'" -o bin/wgo main.go
           ls -la bin/
 
       - name: Create GitHub Release
