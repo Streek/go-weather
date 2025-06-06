@@ -91,8 +91,9 @@ jobs:
         run: |
           # Set up SSH key for AUR
           mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/aur
+          echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/aur
           chmod 600 ~/.ssh/aur
+          chmod 700 ~/.ssh
           ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
           
           # Configure SSH to use the AUR key
@@ -100,7 +101,12 @@ jobs:
           Host aur.archlinux.org
             IdentityFile ~/.ssh/aur
             User aur
+            IdentitiesOnly yes
           EOF
+          chmod 600 ~/.ssh/config
+          
+          # Test SSH connection
+          ssh -T aur@aur.archlinux.org || echo "SSH test failed, continuing..."
           
           # Clone AUR repository (or create if it doesn't exist)
           if git ls-remote ssh://aur@aur.archlinux.org/go-weather.git &>/dev/null; then
