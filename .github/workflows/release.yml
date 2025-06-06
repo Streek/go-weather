@@ -115,10 +115,15 @@ jobs:
           
           # Copy and update PKGBUILD
           cp PKGBUILD aur-repo/
+          cp .SRCINFO aur-repo/
           cd aur-repo
           
           # Update PKGBUILD with new version
           sed -i "s/pkgver=.*/pkgver=${{ steps.version.outputs.version }}/" PKGBUILD
+          
+          # Update .SRCINFO with new version
+          sed -i "s/pkgver = .*/pkgver = ${{ steps.version.outputs.version }}/" .SRCINFO
+          sed -i "s/source = wgo-.*.tar.gz/source = wgo-${{ steps.version.outputs.version }}.tar.gz::https:\/\/github.com\/streek\/go-weather\/archive\/v${{ steps.version.outputs.version }}.tar.gz/" .SRCINFO
 
           # Commit and push to AUR
           git config user.name "Keith Connolly"
