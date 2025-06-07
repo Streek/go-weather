@@ -139,4 +139,4 @@ jobs:
           git commit -m "Update to version ${{ steps.version.outputs.version }}" || echo "No changes to commit"
           git push --set-upstream origin master
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_KEY }}
+          SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
