@@ -1,7 +1,7 @@
 .PHONY: build clean install package release version-bump
 
 # Build variables
-BINARY_NAME=wgo
+BINARY_NAME=go-weather
 VERSION=$(shell cat VERSION)
 BUILD_DIR=build
 LDFLAGS=-X 'main.appVersion=$(VERSION)'

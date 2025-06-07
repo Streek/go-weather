@@ -49,22 +49,22 @@ yay -S weather-go
 
 ```bash
 # Basic usage (shows only current weather for default location)
-wgo
+go-weather
 
 # Show 7-day forecast for a different location
-wgo -daily -zip 10001
+go-weather -daily -zip 10001
 
 # Show hourly forecast in table format
-wgo -hourly -table
+go-weather -hourly -table
 
 # Show both daily and hourly forecasts for another location
-wgo -d -h -z "Paris, France"
+go-weather -d -h -z "Paris, France"
 
 # Save a new default location without running a query
-wgo --save-zip "Tokyo, Japan"
+go-weather --save-zip "Tokyo, Japan"
 
 # Save table display format as default
-wgo --save-display table
+go-weather --save-display table
 ```
 
 ### Command-line Options

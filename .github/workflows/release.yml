@@ -70,7 +70,7 @@ jobs:
       - name: Build application
         run: |
           mkdir -p bin/
-          go build -ldflags "-X 'main.appVersion=${{ steps.version.outputs.version }}'" -o bin/wgo main.go
+          go build -ldflags "-X 'main.appVersion=${{ steps.version.outputs.version }}'" -o bin/go-weather main.go
           ls -la bin/
 
       - name: Create GitHub Release
@@ -129,7 +129,7 @@ jobs:
           
           # Update .SRCINFO with new version
           sed -i "s/pkgver = .*/pkgver = ${{ steps.version.outputs.version }}/" .SRCINFO
-          sed -i "s/source = wgo-.*.tar.gz/source = wgo-${{ steps.version.outputs.version }}.tar.gz::https:\/\/github.com\/streek\/go-weather\/archive\/v${{ steps.version.outputs.version }}.tar.gz/" .SRCINFO
+          sed -i "s/source = go-weather-.*.tar.gz/source = go-weather-${{ steps.version.outputs.version }}.tar.gz::https:\/\/github.com\/streek\/go-weather\/archive\/v${{ steps.version.outputs.version }}.tar.gz/" .SRCINFO
 
           # Commit and push to AUR
           git config user.name "Keith Connolly"

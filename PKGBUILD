@@ -1,5 +1,5 @@
 # Maintainer: Keith Connolly <streek@mesaro.com>
-pkgname=wgo
+pkgname=go-weather
 pkgver=$(cat VERSION 2>/dev/null || echo "1.0.1")
 pkgrel=1
 pkgdesc="Console-based weather application"
@@ -21,11 +21,11 @@ build() {
   
   # Read version and inject it during build
   VERSION=$(cat VERSION)
-  go build -ldflags "-X 'main.appVersion=$VERSION'" -o wgo .
+  go build -ldflags "-X 'main.appVersion=$VERSION'" -o go-weather .
 }
 
 package() {
   cd "$srcdir/go-weather-$pkgver"
-  install -Dm755 wgo "$pkgdir/usr/bin/wgo"
+  install -Dm755 go-weather "$pkgdir/usr/bin/go-weather"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }
