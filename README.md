@@ -42,7 +42,7 @@ sudo make install
 
 ```bash
 # Install from AUR
-yay -S weather-go
+yay -S go-weather
 ```
 
 ## Usage
