@@ -1,5 +1,4 @@
-[![Go](https://github.com/Streek/go-weather/actions/workflows/go.yml/badge.svg)](https://github.com/Streek/go-weather/actions/workflows/go.yml)
-[![Publish to AUR](https://github.com/Streek/go-weather/actions/workflows/aur-publish.yml/badge.svg)](https://github.com/Streek/go-weather/actions/workflows/aur-publish.yml)
+[![Release and AUR Publish](https://github.com/Streek/go-weather/actions/workflows/release.yml/badge.svg)](https://github.com/Streek/go-weather/actions/workflows/release.yml)
 
 # Console Go Weather
 
