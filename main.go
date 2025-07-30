@@ -312,28 +312,6 @@ func saveConfig(config Config) error {
 	return os.WriteFile(configPath, data, 0644)
 }
 
-// getZipCode returns the location to use for weather lookup
-func getZipCode(override string, config *Config) string {
-	if override != "" {
-		// Don't save the new zip code to config
-		return override
-	}
-
-	// Use config zip code if available
-	if config.ZipCode != "" {
-		return config.ZipCode
-	}
-
-	// Otherwise ask user
-	fmt.Print("Enter your location (ZIP/postal code or city name): ")
-	var zip string
-	fmt.Scanln(&zip)
-
-	// Don't save to config here
-
-	return zip
-}
-
 // getConfigPath returns the path to the config file
 func getConfigPath() string {
 	home, err := os.UserHomeDir()
