@@ -383,12 +383,21 @@ func getCoordinates(location string) (float64, float64, error) {
 
 // WeatherData structure to hold all weather information
 type WeatherData struct {
-	CurrentWeather struct {
+	Latitude         float64 `json:"latitude"`
+	Longitude        float64 `json:"longitude"`
+	Timezone         string  `json:"timezone"`
+	TimezoneAbbr     string  `json:"timezone_abbreviation"`
+	UtcOffsetSeconds int     `json:"utc_offset_seconds"`
+	CurrentWeather   struct {
 		Temperature float64 `json:"temperature"`
 		WindSpeed   float64 `json:"windspeed"`
 		WeatherCode int     `json:"weathercode"`
 		Time        string  `json:"time"`
 	} `json:"current_weather"`
+	CurrentWeatherUnits struct {
+		Temperature string `json:"temperature"`
+		WindSpeed   string `json:"windspeed"`
+	} `json:"current_weather_units"`
 	Daily struct {
 		Time             []string  `json:"time"`
 		WeatherCode      []int     `json:"weathercode"`
@@ -396,12 +405,19 @@ type WeatherData struct {
 		TemperatureMin   []float64 `json:"temperature_2m_min"`
 		PrecipitationSum []float64 `json:"precipitation_sum"`
 	} `json:"daily"`
+	DailyUnits struct {
+		TemperatureMax string `json:"temperature_2m_max"`
+		TemperatureMin string `json:"temperature_2m_min"`
+	} `json:"daily_units"`
 	Hourly struct {
 		Time          []string  `json:"time"`
 		Temperature   []float64 `json:"temperature_2m"`
 		Precipitation []float64 `json:"precipitation"`
 		WeatherCode   []int     `json:"weathercode"`
 	} `json:"hourly"`
+	HourlyUnits struct {
+		Temperature string `json:"temperature_2m"`
+	} `json:"hourly_units"`
 }
 
 // Cache file structure with timestamp and data
@@ -424,13 +440,20 @@ func fetchWeather(lat, lon float64, showDaily, showHourly bool, displayMode Disp
 	// Build URL with parameters for requested forecast types
 	url := fmt.Sprintf("https://api.open-meteo.com/v1/forecast?latitude=%f&longitude=%f&current_weather=true", lat, lon)
 
+	// Always request daily data for today's high/low
+	url += "&daily=temperature_2m_max,temperature_2m_min"
+
+	// Add weathercode to daily if showing daily forecast
+	if showDaily {
+		url += ",weathercode,precipitation_sum"
+	}
+
+	// Add timezone parameter to get timezone-aware data
+	url += "&timezone=auto"
+
 	// Add unit-specific parameters
 	if unitSystem == UnitImperial {
 		url += "&temperature_unit=fahrenheit&windspeed_unit=mph&precipitation_unit=inch"
-	}
-
-	if showDaily {
-		url += "&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum"
 	}
 
 	if showHourly {
@@ -468,6 +491,8 @@ func fetchWeather(lat, lon float64, showDaily, showHourly bool, displayMode Disp
 
 // Generate a cache key from request parameters
 func generateCacheKey(lat, lon float64, daily, hourly bool, unitSystem string) string {
+	// Since we always request basic daily data (temperature_2m_max, temperature_2m_min),
+	// we only need to differentiate based on whether additional daily data is requested
 	key := fmt.Sprintf("%.4f-%.4f-d%v-h%v-u%s", lat, lon, daily, hourly, unitSystem)
 	hash := md5.Sum([]byte(key))
 	return hex.EncodeToString(hash[:])
@@ -533,6 +558,20 @@ func displayWeatherData(weather WeatherData, showDaily, showHourly bool, mode Di
 	default:
 		displayWeatherAsText(weather, showDaily, showHourly, unitSystem, useColors)
 	}
+}
+
+// getTodayDateInTimezone returns today's date in the specified timezone format
+func getTodayDateInTimezone(weather WeatherData) string {
+	// If we have timezone information from the API, use it
+	if weather.Timezone != "" {
+		location, err := time.LoadLocation(weather.Timezone)
+		if err == nil {
+			return time.Now().In(location).Format("2006-01-02")
+		}
+	}
+
+	// Fallback to local time if timezone parsing fails
+	return time.Now().Format("2006-01-02")
 }
 
 // Get the appropriate temperature units based on unit system
@@ -616,9 +655,9 @@ func displayWeatherAsText(weather WeatherData, showDaily, showHourly bool, unitS
 		fmt.Printf("  Temperature: %.1f%s\n", weather.CurrentWeather.Temperature, tempUnit)
 	}
 
-	// Add high/low temperatures for today if daily data is available
+	// Add high/low temperatures for today using current date
 	if len(weather.Daily.Time) > 0 {
-		today := time.Now().Format("2006-01-02")
+		today := getTodayDateInTimezone(weather)
 		for i, day := range weather.Daily.Time {
 			if day == today {
 				if useColors {
@@ -695,14 +734,14 @@ func displayWeatherAsTable(weather WeatherData, showDaily, showHourly bool, unit
 
 	// Current weather display
 	fmt.Println("Current Weather:")
-	printLine(60) // Increased width to accommodate high/low
+	printLine(60)
 	fmt.Printf("| %-10s | %-12s | %-10s | %-12s | %-15s |\n", "Temperature", "High/Low", "Wind", "Time", "Condition")
 	printLine(60)
 
-	// Find today's high/low if available
+	// Find today's high/low using current date
 	highTemp, lowTemp := weather.CurrentWeather.Temperature, weather.CurrentWeather.Temperature
 	if len(weather.Daily.Time) > 0 {
-		today := time.Now().Format("2006-01-02")
+		today := getTodayDateInTimezone(weather)
 		for i, day := range weather.Daily.Time {
 			if day == today {
 				highTemp = weather.Daily.TemperatureMax[i]
