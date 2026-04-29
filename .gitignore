@@ -40,6 +40,10 @@ go.work.sum
 # Local configuration
 weather_config.json
 
+# Environment files
+.env
+.env.*
+
 # Log files
 *.log
 
