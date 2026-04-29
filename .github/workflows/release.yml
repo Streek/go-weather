@@ -97,12 +97,7 @@ jobs:
           ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
           
           # Configure SSH to use the AUR key
-          cat >> ~/.ssh/config << EOF
-          Host aur.archlinux.org
-            IdentityFile ~/.ssh/aur
-            User aur
-            IdentitiesOnly yes
-          EOF
+          printf 'Host aur.archlinux.org\n  IdentityFile ~/.ssh/aur\n  User aur\n  IdentitiesOnly yes\n' >> ~/.ssh/config
           chmod 600 ~/.ssh/config
           
           # Test SSH connection

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,9 +20,13 @@ import (
 const (
 	configFileName = "weather_config.json"
 	cacheDuration  = 1 * time.Hour
+	httpTimeout    = 15 * time.Second
 	appName        = "Weather Console"
 	appVersion     = "1.0.1" // This will be replaced during build
 )
+
+// httpClient is used for all outbound requests with a sane timeout
+var httpClient = &http.Client{Timeout: httpTimeout}
 
 // DisplayMode represents how weather data should be presented
 type DisplayMode string
@@ -106,9 +112,9 @@ func parseFlags() *Command {
 	flag.BoolVar(&cmd.noColors, "no-color", false, "Disable colored output")
 
 	// Add short flag aliases
-	flag.BoolVar(&cmd.showHelp, "?", false, "Short for -help")
+	flag.BoolVar(&cmd.showHelp, "h", false, "Short for -help")
 	flag.BoolVar(&cmd.showDaily, "d", false, "Short for -daily")
-	flag.BoolVar(&cmd.showHourly, "h", false, "Short for -hourly")
+	flag.BoolVar(&cmd.showHourly, "H", false, "Short for -hourly")
 	flag.StringVar(&cmd.zipOverride, "z", "", "Short for -zip")
 	flag.BoolVar(&cmd.forceTableMode, "t", false, "Short for -table")
 	flag.BoolVar(&cmd.forceTextMode, "T", false, "Short for -text")
@@ -188,7 +194,9 @@ func (cmd *Command) execute() error {
 	// If no zip code is set, ask the user
 	if zipCode == "" {
 		fmt.Print("Enter your location (ZIP/postal code or city name): ")
-		fmt.Scanln(&zipCode)
+		reader := bufio.NewReader(os.Stdin)
+		line, _ := reader.ReadString('\n')
+		zipCode = strings.TrimSpace(line)
 	}
 
 	// Handle saving settings if --save flag is provided
@@ -242,9 +250,9 @@ func printHelp() {
 	fmt.Printf("%s v%s - Command Line Weather Information\n\n", appName, appVersion)
 	fmt.Printf("Usage: %s [options]\n\n", os.Args[0])
 	fmt.Printf("Options:\n")
-	fmt.Printf("  -help, -?           Show this help message\n")
+	fmt.Printf("  -help, -h           Show this help message\n")
 	fmt.Printf("  -daily, -d          Show 7-day forecast\n")
-	fmt.Printf("  -hourly, -h         Show hourly forecast for the next 24 hours\n")
+	fmt.Printf("  -hourly, -H         Show hourly forecast for the next 24 hours\n")
 	fmt.Printf("  -zip, -z [location] Override default location (ZIP code or city name)\n")
 	fmt.Printf("  -table, -t          Display output in table format\n")
 	fmt.Printf("  -text, -T           Display output in text format\n")
@@ -331,12 +339,18 @@ type GeoLocation struct {
 
 // Use Open-Meteo's geocoding endpoint to convert location to lat/lon
 func getCoordinates(location string) (float64, float64, error) {
-	url := fmt.Sprintf("https://geocoding-api.open-meteo.com/v1/search?name=%s&count=1", location)
-	resp, err := http.Get(url)
+	encodedLocation := url.QueryEscape(location)
+	requestURL := fmt.Sprintf("https://geocoding-api.open-meteo.com/v1/search?name=%s&count=1", encodedLocation)
+
+	resp, err := httpClient.Get(requestURL)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, fmt.Errorf("geocoding request failed: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, 0, fmt.Errorf("geocoding API returned status %d", resp.StatusCode)
+	}
 
 	type GeoResponse struct {
 		Results []struct {
@@ -348,10 +362,14 @@ func getCoordinates(location string) (float64, float64, error) {
 	}
 
 	var geoResp GeoResponse
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, 0, fmt.Errorf("could not read geocoding response: %w", err)
+	}
+
 	err = json.Unmarshal(body, &geoResp)
 	if err != nil || len(geoResp.Results) == 0 {
-		return 0, 0, fmt.Errorf("location not found")
+		return 0, 0, fmt.Errorf("location not found: %q", location)
 	}
 
 	result := geoResp.Results[0]
@@ -438,11 +456,15 @@ func fetchWeather(lat, lon float64, showDaily, showHourly bool, displayMode Disp
 		url += "&hourly=temperature_2m,precipitation,weathercode&forecast_hours=24"
 	}
 
-	resp, err := http.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return fmt.Errorf("API request failed: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("weather API returned status %d", resp.StatusCode)
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -476,10 +498,12 @@ func generateCacheKey(lat, lon float64, daily, hourly bool, unitSystem string) s
 	return hex.EncodeToString(hash[:])
 }
 
-// Get cache directory
+// Get cache directory, creating it if needed
 func getCacheDir() string {
 	cacheDir := filepath.Join(os.TempDir(), "weather-cache")
-	os.MkdirAll(cacheDir, 0755)
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not create cache directory: %v\n", err)
+	}
 	return cacheDir
 }
 
@@ -712,9 +736,9 @@ func displayWeatherAsTable(weather WeatherData, showDaily, showHourly bool, unit
 
 	// Current weather display
 	fmt.Println("Current Weather:")
-	printLine(60)
-	fmt.Printf("| %-10s | %-12s | %-10s | %-12s | %-15s |\n", "Temperature", "High/Low", "Wind", "Time", "Condition")
-	printLine(60)
+	printLine(76)
+	fmt.Printf("| %-12s | %-16s | %-10s | %-8s | %-15s |\n", "Temperature", "High/Low", "Wind", "Time", "Condition")
+	printLine(76)
 
 	// Find today's high/low using current date
 	highTemp, lowTemp := weather.CurrentWeather.Temperature, weather.CurrentWeather.Temperature
@@ -729,78 +753,88 @@ func displayWeatherAsTable(weather WeatherData, showDaily, showHourly bool, unit
 		}
 	}
 
+	condition := truncateString(getWeatherDescription(weather.CurrentWeather.WeatherCode), 15)
+	timeStr := formatTime(weather.CurrentWeather.Time)
+	windStr := fmt.Sprintf("%.1f %s", weather.CurrentWeather.WindSpeed, windUnit)
+
 	if useColors {
-		fmt.Printf("| %-10s | %-12s | %-10.1f %s | %-12s | %-15s |\n",
-			colorizeTemp(weather.CurrentWeather.Temperature, unitSystem),
-			fmt.Sprintf("%s/%s",
-				colorizeTemp(highTemp, unitSystem),
-				colorizeTemp(lowTemp, unitSystem)),
-			weather.CurrentWeather.WindSpeed, windUnit,
-			formatTime(weather.CurrentWeather.Time),
-			truncateString(getWeatherDescription(weather.CurrentWeather.WeatherCode), 15))
+		tempStr := colorizeTemp(weather.CurrentWeather.Temperature, unitSystem)
+		highLowStr := fmt.Sprintf("%s/%s",
+			colorizeTemp(highTemp, unitSystem),
+			colorizeTemp(lowTemp, unitSystem))
+
+		fmt.Printf("| %s | %s | %-10s | %-8s | %-15s |\n",
+			padRight(tempStr, 12),
+			padRight(highLowStr, 16),
+			windStr, timeStr, condition)
 	} else {
-		fmt.Printf("| %-10.1f%s | %-12s | %-10.1f %s | %-12s | %-15s |\n",
-			weather.CurrentWeather.Temperature, tempUnit,
-			fmt.Sprintf("%.1f/%.1f%s", highTemp, lowTemp, tempUnit),
-			weather.CurrentWeather.WindSpeed, windUnit,
-			formatTime(weather.CurrentWeather.Time),
-			truncateString(getWeatherDescription(weather.CurrentWeather.WeatherCode), 15))
+		tempStr := fmt.Sprintf("%.1f%s", weather.CurrentWeather.Temperature, tempUnit)
+		highLowStr := fmt.Sprintf("%.1f/%.1f%s", highTemp, lowTemp, tempUnit)
+
+		fmt.Printf("| %-12s | %-16s | %-10s | %-8s | %-15s |\n",
+			tempStr, highLowStr, windStr, timeStr, condition)
 	}
-	printLine(60)
+	printLine(76)
 
 	// Display daily forecast if requested
 	if showDaily && len(weather.Daily.Time) > 0 {
 		fmt.Println("\n7-Day Forecast:")
-		printLine(80)
-		fmt.Printf("| %-10s | %-15s | %-12s | %-12s | %-15s |\n",
+		printLine(76)
+		fmt.Printf("| %-10s | %-15s | %-10s | %-10s | %-13s |\n",
 			"Date", "Condition", "Min Temp", "Max Temp", "Precipitation")
-		printLine(80)
+		printLine(76)
 
 		for i, day := range weather.Daily.Time {
 			t, _ := time.Parse("2006-01-02", day)
+			dateStr := t.Format("Mon Jan 2")
+			condStr := truncateString(getWeatherDescription(weather.Daily.WeatherCode[i]), 15)
+			precipStr := fmt.Sprintf("%.1f%s", weather.Daily.PrecipitationSum[i], precipUnit)
 
 			if useColors {
-				fmt.Printf("| %-10s | %-15s | %-12s | %-12s | %-15.1f%s |\n",
-					t.Format("Mon Jan 2"),
-					truncateString(getWeatherDescription(weather.Daily.WeatherCode[i]), 15),
-					colorizeTemp(weather.Daily.TemperatureMin[i], unitSystem),
-					colorizeTemp(weather.Daily.TemperatureMax[i], unitSystem),
-					weather.Daily.PrecipitationSum[i], precipUnit)
+				minStr := colorizeTemp(weather.Daily.TemperatureMin[i], unitSystem)
+				maxStr := colorizeTemp(weather.Daily.TemperatureMax[i], unitSystem)
+
+				fmt.Printf("| %-10s | %-15s | %s | %s | %-13s |\n",
+					dateStr, condStr,
+					padRight(minStr, 10),
+					padRight(maxStr, 10),
+					precipStr)
 			} else {
-				fmt.Printf("| %-10s | %-15s | %-12.1f%s | %-12.1f%s | %-15.1f%s |\n",
-					t.Format("Mon Jan 2"),
-					truncateString(getWeatherDescription(weather.Daily.WeatherCode[i]), 15),
-					weather.Daily.TemperatureMin[i], tempUnit,
-					weather.Daily.TemperatureMax[i], tempUnit,
-					weather.Daily.PrecipitationSum[i], precipUnit)
+				minStr := fmt.Sprintf("%.1f%s", weather.Daily.TemperatureMin[i], tempUnit)
+				maxStr := fmt.Sprintf("%.1f%s", weather.Daily.TemperatureMax[i], tempUnit)
+
+				fmt.Printf("| %-10s | %-15s | %-10s | %-10s | %-13s |\n",
+					dateStr, condStr, minStr, maxStr, precipStr)
 			}
 		}
-		printLine(80)
+		printLine(76)
 	}
 
 	// Display hourly forecast if requested
 	if showHourly && len(weather.Hourly.Time) > 0 {
 		fmt.Println("\nHourly Forecast (next 24h):")
 		printLine(60)
-		fmt.Printf("| %-5s | %-15s | %-12s | %-15s |\n",
+		fmt.Printf("| %-5s | %-15s | %-12s | %-13s |\n",
 			"Time", "Condition", "Temperature", "Precipitation")
 		printLine(60)
 
 		for i := 0; i < 24 && i < len(weather.Hourly.Time); i++ {
 			t, _ := time.Parse("2006-01-02T15:04", weather.Hourly.Time[i])
+			condStr := truncateString(getWeatherDescription(weather.Hourly.WeatherCode[i]), 15)
+			precipStr := fmt.Sprintf("%.1f%s", weather.Hourly.Precipitation[i], precipUnit)
 
 			if useColors {
-				fmt.Printf("| %-5s | %-15s | %-12s | %-15.1f%s |\n",
-					t.Format("15:04"),
-					truncateString(getWeatherDescription(weather.Hourly.WeatherCode[i]), 15),
-					colorizeTemp(weather.Hourly.Temperature[i], unitSystem),
-					weather.Hourly.Precipitation[i], precipUnit)
+				tempStr := colorizeTemp(weather.Hourly.Temperature[i], unitSystem)
+
+				fmt.Printf("| %-5s | %-15s | %s | %-13s |\n",
+					t.Format("15:04"), condStr,
+					padRight(tempStr, 12),
+					precipStr)
 			} else {
-				fmt.Printf("| %-5s | %-15s | %-12.1f%s | %-15.1f%s |\n",
-					t.Format("15:04"),
-					truncateString(getWeatherDescription(weather.Hourly.WeatherCode[i]), 15),
-					weather.Hourly.Temperature[i], tempUnit,
-					weather.Hourly.Precipitation[i], precipUnit)
+				tempStr := fmt.Sprintf("%.1f%s", weather.Hourly.Temperature[i], tempUnit)
+
+				fmt.Printf("| %-5s | %-15s | %-12s | %-13s |\n",
+					t.Format("15:04"), condStr, tempStr, precipStr)
 			}
 		}
 		printLine(60)
@@ -822,6 +856,37 @@ func truncateString(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// padRight pads a string (which may contain ANSI codes) to the given visible width.
+// It strips ANSI sequences to measure the visible length, then appends spaces as needed.
+func padRight(s string, width int) string {
+	visible := stripAnsi(s)
+	padding := width - len(visible)
+	if padding <= 0 {
+		return s
+	}
+	return s + strings.Repeat(" ", padding)
+}
+
+// stripAnsi removes ANSI escape sequences from a string to get the visible content
+func stripAnsi(s string) string {
+	var result strings.Builder
+	inEscape := false
+	for _, r := range s {
+		if r == '\033' {
+			inEscape = true
+			continue
+		}
+		if inEscape {
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+				inEscape = false
+			}
+			continue
+		}
+		result.WriteRune(r)
+	}
+	return result.String()
 }
 
 // Helper function to format ISO time string

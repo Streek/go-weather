@@ -6,7 +6,7 @@ pkgbase = go-weather
 	arch = x86_64
 	arch = aarch64
 	license = GPL3
-	makedepends = go
+	makedepends = go>=1.21
 	source = go-weather-1.0.1.tar.gz::https://github.com/streek/go-weather/archive/v1.0.1.tar.gz
 	sha256sums = SKIP
 
