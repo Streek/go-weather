@@ -9,7 +9,7 @@ license=('GPL3')
 depends=()
 makedepends=('go>=1.21')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('e0d070fc77058b3f1b7bb713370573267a710277c401b8e867a523291f3aa6dc')
 
 build() {
   cd "$srcdir/go-weather-$pkgver"

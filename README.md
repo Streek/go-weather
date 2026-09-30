@@ -19,7 +19,7 @@ A powerful command-line weather application written in Go that provides current,
 
 ### Prerequisites
 
-- Go 1.16 or higher
+- Go 1.21 or higher
 
 ### Building from source
 
@@ -74,8 +74,7 @@ go-weather --save-display table
 - `-zip`, `-z` [location]: Override default location (ZIP code or city name)
 - `-table`, `-t`: Display output in table format (save preference)
 - `-text`, `-T`: Display output in text format (save preference)
-- `-save-zip` [location]: Save a default location without querying weather
-- `-save-display` [format]: Save display format preference (text or table)
+- `-save`, `-s`: Save the current location and explicitly selected preferences as defaults
 
 ## Configuration
 

@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -21,6 +22,7 @@ const (
 	configFileName = "weather_config.json"
 	cacheDuration  = 1 * time.Hour
 	httpTimeout    = 15 * time.Second
+	maxAPIResponse = 1 << 20
 	appName        = "Weather Console"
 	appVersion     = "1.0.1" // This will be replaced during build
 )
@@ -317,7 +319,10 @@ func saveConfig(config Config) error {
 		return err
 	}
 
-	return os.WriteFile(configPath, data, 0644)
+	if err := os.Chmod(configDir, 0700); err != nil {
+		return err
+	}
+	return atomicWrite(configPath, data)
 }
 
 // getConfigPath returns the path to the config file
@@ -362,7 +367,7 @@ func getCoordinates(location string) (float64, float64, error) {
 	}
 
 	var geoResp GeoResponse
-	body, err := io.ReadAll(resp.Body)
+	body, err := readResponseBody(resp.Body)
 	if err != nil {
 		return 0, 0, fmt.Errorf("could not read geocoding response: %w", err)
 	}
@@ -373,6 +378,10 @@ func getCoordinates(location string) (float64, float64, error) {
 	}
 
 	result := geoResp.Results[0]
+	if math.IsNaN(result.Latitude) || math.IsInf(result.Latitude, 0) ||
+		math.IsNaN(result.Longitude) || math.IsInf(result.Longitude, 0) {
+		return 0, 0, fmt.Errorf("location not found: %q", location)
+	}
 	fmt.Printf("Location detected: %s, %s\n", result.Name, result.Country)
 	return result.Latitude, result.Longitude, nil
 }
@@ -427,7 +436,7 @@ func fetchWeather(lat, lon float64, showDaily, showHourly bool, displayMode Disp
 	// Check cache first
 	cacheKey := generateCacheKey(lat, lon, showDaily, showHourly, string(unitSystem))
 	cachedData, cacheExists := checkCache(cacheKey)
-	if cacheExists {
+	if cacheExists && validateWeatherData(cachedData, showDaily, showHourly) == nil {
 		fmt.Println("Using cached weather data")
 		displayWeatherData(cachedData, showDaily, showHourly, displayMode, unitSystem, useColors)
 		return nil
@@ -466,7 +475,7 @@ func fetchWeather(lat, lon float64, showDaily, showHourly bool, displayMode Disp
 		return fmt.Errorf("weather API returned status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := readResponseBody(resp.Body)
 	if err != nil {
 		return fmt.Errorf("could not read response: %w", err)
 	}
@@ -476,6 +485,9 @@ func fetchWeather(lat, lon float64, showDaily, showHourly bool, displayMode Disp
 	err = json.Unmarshal(body, &weather)
 	if err != nil {
 		return fmt.Errorf("could not parse weather data: %w", err)
+	}
+	if err := validateWeatherData(weather, showDaily, showHourly); err != nil {
+		return err
 	}
 
 	// Save to cache
@@ -501,8 +513,10 @@ func generateCacheKey(lat, lon float64, daily, hourly bool, unitSystem string) s
 // Get cache directory, creating it if needed
 func getCacheDir() string {
 	cacheDir := filepath.Join(os.TempDir(), "weather-cache")
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+	if err := os.MkdirAll(cacheDir, 0700); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not create cache directory: %v\n", err)
+	} else if err := os.Chmod(cacheDir, 0700); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not secure cache directory: %v\n", err)
 	}
 	return cacheDir
 }
@@ -512,7 +526,12 @@ func checkCache(cacheKey string) (WeatherData, bool) {
 	cacheFile := filepath.Join(getCacheDir(), cacheKey+".json")
 
 	// Check if file exists and is not too old
-	data, err := os.ReadFile(cacheFile)
+	file, err := os.Open(cacheFile)
+	if err != nil {
+		return WeatherData{}, false
+	}
+	defer file.Close()
+	data, err := readResponseBody(file)
 	if err != nil {
 		return WeatherData{}, false
 	}
@@ -523,7 +542,7 @@ func checkCache(cacheKey string) (WeatherData, bool) {
 	}
 
 	// Check if cache is still valid
-	if time.Since(cache.Timestamp) > cacheDuration {
+	if cache.Timestamp.IsZero() || cache.Timestamp.After(time.Now()) || time.Since(cache.Timestamp) > cacheDuration {
 		return WeatherData{}, false
 	}
 
@@ -549,7 +568,59 @@ func saveToCache(cacheKey string, data []byte) error {
 	}
 
 	cacheFile := filepath.Join(getCacheDir(), cacheKey+".json")
-	return os.WriteFile(cacheFile, cacheData, 0644)
+	return atomicWrite(cacheFile, cacheData)
+}
+
+func atomicWrite(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	temporary, err := os.CreateTemp(dir, ".weather-*")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(0600); err != nil {
+		temporary.Close()
+		return err
+	}
+	if _, err := temporary.Write(data); err != nil {
+		temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temporaryPath, path)
+}
+
+func readResponseBody(r io.Reader) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(r, maxAPIResponse+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxAPIResponse {
+		return nil, fmt.Errorf("response exceeds %d bytes", maxAPIResponse)
+	}
+	return body, nil
+}
+
+func validateWeatherData(weather WeatherData, showDaily, showHourly bool) error {
+	if weather.CurrentWeather.Time == "" {
+		return fmt.Errorf("weather API returned malformed data: current weather is missing")
+	}
+	if len(weather.Daily.Time) == 0 || len(weather.Daily.TemperatureMax) != len(weather.Daily.Time) ||
+		len(weather.Daily.TemperatureMin) != len(weather.Daily.Time) {
+		return fmt.Errorf("weather API returned malformed data: daily forecast arrays do not match")
+	}
+	if showDaily && (len(weather.Daily.WeatherCode) != len(weather.Daily.Time) ||
+		len(weather.Daily.PrecipitationSum) != len(weather.Daily.Time)) {
+		return fmt.Errorf("weather API returned malformed data: daily detail arrays do not match")
+	}
+	if showHourly && (len(weather.Hourly.Time) == 0 || len(weather.Hourly.Temperature) != len(weather.Hourly.Time) ||
+		len(weather.Hourly.Precipitation) != len(weather.Hourly.Time) || len(weather.Hourly.WeatherCode) != len(weather.Hourly.Time)) {
+		return fmt.Errorf("weather API returned malformed data: hourly forecast arrays do not match")
+	}
+	return nil
 }
 
 // Display weather data in appropriate format

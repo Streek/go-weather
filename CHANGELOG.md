@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Malformed or oversized API responses are rejected before they can cause
+  unsafe forecast indexing or excessive memory use.
+- Configuration and cache files are written with owner-only permissions.
+
+### Changed
+
+- The release workflow now runs from matching version tags instead of arbitrary
+  branch pushes and pins each AUR source archive checksum.
+- Repository guidance, release, security, style, and remaining-work notes are
+  documented in dedicated files.
+
 ## [1.0.2] - 2026-04-29
 
 ### Fixed

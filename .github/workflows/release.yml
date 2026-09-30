@@ -2,7 +2,7 @@ name: Release and AUR Publish
 
 on:
   push:
-    branches: [ master, main ]
+    tags: [ 'v*' ]
   workflow_dispatch:
 
 jobs:
@@ -19,19 +19,16 @@ jobs:
       - name: Get current version
         id: version
         run: |
-          if [ -f VERSION ]; then
-            VERSION=$(cat VERSION)
-          else
-            VERSION="1.0.0"
-            echo "$VERSION" > VERSION
-          fi
+          test -f VERSION
+          VERSION=$(cat VERSION)
+          test "${GITHUB_REF_NAME}" = "v${VERSION}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Current version: $VERSION"
 
       - name: Check if tag exists
         id: tag-check
         run: |
-          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+          if git rev-parse "refs/tags/v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
             echo "exists=true" >> $GITHUB_OUTPUT
             echo "Tag v${{ steps.version.outputs.version }} already exists"
           else
@@ -49,16 +46,6 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
             echo "Release v${{ steps.version.outputs.version }} does not exist"
           fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create tag if not exists
-        if: steps.tag-check.outputs.exists == 'false'
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git tag -a "v${{ steps.version.outputs.version }}" -m "Release version ${{ steps.version.outputs.version }}"
-          git push origin "v${{ steps.version.outputs.version }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -119,12 +106,18 @@ jobs:
           cp .SRCINFO aur-repo/
           cd aur-repo
           
-          # Update PKGBUILD with new version
-          sed -i "s/pkgver=.*/pkgver=${{ steps.version.outputs.version }}/" PKGBUILD
+           # Update PKGBUILD with new version
+           sed -i "s/pkgver=.*/pkgver=${{ steps.version.outputs.version }}/" PKGBUILD
+
+           # Pin the exact source archive used by this release.
+           SOURCE_URL="https://github.com/streek/go-weather/archive/v${{ steps.version.outputs.version }}.tar.gz"
+           SOURCE_SHA256=$(curl --fail --location --silent "$SOURCE_URL" | sha256sum | cut -d' ' -f1)
+           sed -i "s/sha256sums=('.*')/sha256sums=('$SOURCE_SHA256')/" PKGBUILD
           
           # Update .SRCINFO with new version
-          sed -i "s/pkgver = .*/pkgver = ${{ steps.version.outputs.version }}/" .SRCINFO
-          sed -i "s/source = go-weather-.*.tar.gz/source = go-weather-${{ steps.version.outputs.version }}.tar.gz::https:\/\/github.com\/streek\/go-weather\/archive\/v${{ steps.version.outputs.version }}.tar.gz/" .SRCINFO
+           sed -i "s/pkgver = .*/pkgver = ${{ steps.version.outputs.version }}/" .SRCINFO
+           sed -i "s/source = go-weather-.*.tar.gz/source = go-weather-${{ steps.version.outputs.version }}.tar.gz::https:\/\/github.com\/streek\/go-weather\/archive\/v${{ steps.version.outputs.version }}.tar.gz/" .SRCINFO
+           sed -i "s/sha256sums = .*/sha256sums = $SOURCE_SHA256/" .SRCINFO
 
           # Commit and push to AUR
           git config user.name "Keith Connolly"

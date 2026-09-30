@@ -1,4 +1,4 @@
-.PHONY: build clean install package release version-bump
+.PHONY: build clean install package release check test version-bump
 
 # Build variables
 BINARY_NAME=go-weather
@@ -8,6 +8,14 @@ LDFLAGS=-X 'main.appVersion=$(VERSION)'
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY_NAME) main.go
+
+test:
+	go test ./...
+
+check:
+	@test -z "$$(gofmt -l *.go)" || (echo "Go files are not formatted"; exit 1)
+	go vet ./...
+	go test ./...
 
 install: build
 	install -Dm755 $(BINARY_NAME) $(DESTDIR)/usr/bin/$(BINARY_NAME)
